@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VidReplica</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 60px 20px;
+        }
+        .container {
+            width: 100%;
+            max-width: 520px;
+        }
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: #fff;
+        }
+        .subtitle {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 36px;
+        }
+        label {
+            display: block;
+            font-size: 0.85rem;
+            color: #999;
+            margin-bottom: 6px;
+            margin-top: 20px;
+        }
+        input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            background: #161616;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            color: #ccc;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        input[type="file"]:hover { border-color: #444; }
+        textarea {
+            width: 100%;
+            padding: 12px;
+            background: #161616;
+            border: 1px solid #2a2a2a;
+            border-radius: 8px;
+            color: #ccc;
+            font-size: 0.9rem;
+            resize: vertical;
+            min-height: 80px;
+            font-family: inherit;
+        }
+        textarea:focus, input[type="file"]:focus {
+            outline: none;
+            border-color: #555;
+        }
+        button {
+            margin-top: 28px;
+            width: 100%;
+            padding: 14px;
+            background: #fff;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+        button:hover { opacity: 0.85; }
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        .progress-section, .download-section, .error-section {
+            margin-top: 32px;
+            display: none;
+        }
+        .status-text {
+            font-size: 0.9rem;
+            color: #aaa;
+            margin-bottom: 10px;
+        }
+        .progress-bar-bg {
+            width: 100%;
+            height: 6px;
+            background: #222;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            background: #fff;
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.4s ease;
+        }
+        .download-section a {
+            display: inline-block;
+            margin-top: 12px;
+            padding: 12px 28px;
+            background: #1a8c1a;
+            color: #fff;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+        .download-section a:hover { opacity: 0.85; }
+        .error-section .error-text {
+            color: #e74c3c;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>VidReplica</h1>
+        <p class="subtitle">Upload a source video and product image to generate a replica.</p>
+
+        <form id="uploadForm">
+            <label for="video">Upload source video</label>
+            <input type="file" id="video" name="video" accept=".mp4,.mov" required>
+
+            <label for="product_image">Upload product image</label>
+            <input type="file" id="product_image" name="product_image" accept=".jpg,.jpeg,.png" required>
+
+            <label for="amendments">Additional instructions (optional)</label>
+            <textarea id="amendments" name="amendments"
+                placeholder="e.g. more energetic tone, mention free shipping, focus on product close-ups"></textarea>
+
+            <button type="submit" id="submitBtn">Generate Video</button>
+        </form>
+
+        <div class="progress-section" id="progressSection">
+            <p class="status-text" id="statusText">Starting...</p>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progressBar"></div>
+            </div>
+        </div>
+
+        <div class="download-section" id="downloadSection">
+            <p style="color:#1a8c1a; font-weight:600;">Your video is ready!</p>
+            <a id="downloadLink" href="#">Download Video</a>
+        </div>
+
+        <div class="error-section" id="errorSection">
+            <p class="error-text" id="errorText"></p>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('uploadForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const progressSection = document.getElementById('progressSection');
+        const statusText = document.getElementById('statusText');
+        const progressBar = document.getElementById('progressBar');
+        const downloadSection = document.getElementById('downloadSection');
+        const downloadLink = document.getElementById('downloadLink');
+        const errorSection = document.getElementById('errorSection');
+        const errorText = document.getElementById('errorText');
+
+        const STATUS_LABELS = {
+            queued: 'Queued...',
+            loading_whisper: 'Loading transcription model...',
+            splitting: 'Splitting video into segments...',
+            extracting_frames: 'Extracting frames',
+            transcribing: 'Transcribing audio',
+            generating_prompt: 'Generating AI prompt',
+            generating_video: 'Generating video via Seedance',
+            stitching: 'Stitching final video...',
+            complete: 'Complete!',
+            failed: 'Failed',
+        };
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            submitBtn.disabled = true;
+            progressSection.style.display = 'block';
+            downloadSection.style.display = 'none';
+            errorSection.style.display = 'none';
+            statusText.textContent = 'Uploading...';
+            progressBar.style.width = '0%';
+
+            const formData = new FormData(form);
+
+            try {
+                const resp = await fetch('/generate', { method: 'POST', body: formData });
+                const data = await resp.json();
+                if (!resp.ok) {
+                    throw new Error(data.error || 'Upload failed');
+                }
+                pollStatus(data.job_id);
+            } catch (err) {
+                showError(err.message);
+            }
+        });
+
+        function pollStatus(jobId) {
+            const interval = setInterval(async () => {
+                try {
+                    const resp = await fetch(`/status/${jobId}`);
+                    const job = await resp.json();
+
+                    if (job.error && job.status === 'failed') {
+                        clearInterval(interval);
+                        showError(job.error);
+                        return;
+                    }
+
+                    // Update status text
+                    let label = STATUS_LABELS[job.status] || job.status;
+                    if (job.current_segment && job.total_segments && !['stitching', 'complete', 'splitting', 'loading_whisper'].includes(job.status)) {
+                        label += ` (segment ${job.current_segment} of ${job.total_segments})`;
+                    }
+                    statusText.textContent = label;
+
+                    // Update progress bar
+                    if (job.total_segments > 0) {
+                        const pct = Math.round((job.current_segment / job.total_segments) * 100);
+                        progressBar.style.width = pct + '%';
+                    }
+
+                    if (job.status === 'complete') {
+                        clearInterval(interval);
+                        progressBar.style.width = '100%';
+                        statusText.textContent = 'Complete!';
+                        downloadLink.href = job.download_url;
+                        downloadSection.style.display = 'block';
+                        submitBtn.disabled = false;
+                    }
+                } catch (err) {
+                    clearInterval(interval);
+                    showError('Lost connection to server');
+                }
+            }, 5000);
+        }
+
+        function showError(msg) {
+            errorSection.style.display = 'block';
+            errorText.textContent = msg;
+            submitBtn.disabled = false;
+        }
+    </script>
+</body>
+</html>

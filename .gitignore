@@ -1,0 +1,7 @@
+.env
+uploads/
+segments/
+outputs/
+__pycache__/
+*.pyc
+.venv/
