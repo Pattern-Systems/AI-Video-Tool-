@@ -30,7 +30,9 @@ def _run_ffmpeg(args: list[str]) -> subprocess.CompletedProcess:
     )
     if result.returncode != 0:
         log.error("ffmpeg error: %s", result.stderr)
-        raise RuntimeError(f"ffmpeg failed: {result.stderr[:500]}")
+        # ffmpeg prints a long version banner to stderr first; take the tail to get the actual error
+        tail = result.stderr[-800:].strip()
+        raise RuntimeError(f"ffmpeg failed: {tail}")
     return result
 
 
@@ -78,13 +80,30 @@ def extract_frames(segment_path: str, job_dir: str, seg_index: int) -> list[str]
 def transcribe_segment(segment_path: str, whisper_model) -> str:
     """Transcribe audio from a video segment using Whisper."""
     try:
-        result = whisper_model.transcribe(segment_path, language="en")
+        result = whisper_model.transcribe(segment_path, language="en", fp16=False)
         text = result.get("text", "").strip()
         log.info("Transcript: %s", text[:100])
         return text
     except Exception as e:
         log.warning("Whisper failed on %s: %s — continuing without transcript", segment_path, e)
         return ""
+
+
+def mux_audio(silent_path: str, audio_source_path: str, output_path: str) -> str:
+    """Mux audio from the original source video into the silent generated video."""
+    _run_ffmpeg([
+        "-i", silent_path,
+        "-i", audio_source_path,
+        "-c:v", "copy",
+        "-c:a", "aac",
+        "-map", "0:v:0",
+        "-map", "1:a:0",
+        "-shortest",
+        "-y",
+        output_path,
+    ])
+    log.info("Muxed audio from %s into %s", audio_source_path, output_path)
+    return output_path
 
 
 def stitch_segments(segment_paths: list[str], output_path: str) -> str:
@@ -95,7 +114,7 @@ def stitch_segments(segment_paths: list[str], output_path: str) -> str:
     list_file = output_path + ".txt"
     with open(list_file, "w") as f:
         for sp in segment_paths:
-            f.write(f"file '{sp}'\n")
+            f.write(f"file '{os.path.abspath(sp)}'\n")
 
     _run_ffmpeg([
         "-f", "concat",
@@ -114,10 +133,10 @@ def run_pipeline(job_id: str, video_path: str, product_image_path: str, amendmen
     job = jobs[job_id]
     job_dir = os.path.join("segments", job_id)
     output_dir = os.path.join("outputs")
-    os.makedirs(job_dir, exist_ok=True)
-    os.makedirs(output_dir, exist_ok=True)
 
     try:
+        os.makedirs(job_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
         # Load Whisper model
         model_name = os.environ.get("WHISPER_MODEL", "base")
         log.info("[%s] Loading Whisper model: %s", job_id, model_name)
@@ -173,8 +192,13 @@ def run_pipeline(job_id: str, video_path: str, product_image_path: str, amendmen
             return
 
         job["status"] = "stitching"
+        silent_path = os.path.join(output_dir, f"{job_id}_silent.mp4")
         output_path = os.path.join(output_dir, f"{job_id}.mp4")
-        stitch_segments(generated_segments, output_path)
+        stitch_segments(generated_segments, silent_path)
+
+        job["status"] = "muxing_audio"
+        mux_audio(silent_path, video_path, output_path)
+        os.remove(silent_path)
 
         job["status"] = "complete"
         job["download_url"] = f"/download/{job_id}"

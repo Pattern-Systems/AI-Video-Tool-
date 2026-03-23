@@ -54,7 +54,8 @@ def generate_seedance_prompt(
         "4. Incorporate the transcript (speech content, tone, energy)\n"
         "5. Instruct Seedance to replace whatever product appears in the original with @product\n"
         "6. Apply any user amendments\n"
-        "7. End with: Maintain 9:16 vertical format, high energy, TikTok Shop style.\n\n"
+        "7. Do NOT include any on-screen text, captions, watermarks, or overlaid words in the scene — keep the scene clean of all text\n"
+        "8. End with: Maintain 9:16 vertical format, high energy, TikTok Shop style.\n\n"
         "Output ONLY the prompt string, nothing else. No quotes, no explanation."
     )
     content.append({"type": "text", "text": instructions})
