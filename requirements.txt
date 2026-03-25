@@ -3,3 +3,4 @@ anthropic>=0.40
 openai-whisper>=20231117
 requests>=2.31
 python-dotenv>=1.0
+PyJWT>=2.0

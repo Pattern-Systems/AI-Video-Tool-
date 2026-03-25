@@ -10,13 +10,13 @@ from pathlib import Path
 
 import whisper
 
-from prompts import generate_seedance_prompt
-from seedance import download_video, generate_segment
+from prompts import generate_kling_prompt
+from kling import download_video, generate_segment
 
 log = logging.getLogger(__name__)
 
-SEGMENT_DURATION = 8  # seconds
-FRAMES_PER_SEGMENT = 9
+SEGMENT_DURATION = 10  # seconds — Kling max per segment
+FRAMES_PER_SEGMENT = 10
 
 # In-memory job store
 jobs: dict[str, dict] = {}
@@ -144,7 +144,7 @@ def run_pipeline(job_id: str, video_path: str, product_image_path: str, amendmen
         whisper_model = whisper.load_model(model_name)
 
         # Step 1: Split video
-        log.info("[%s] Splitting video into %ds segments...", job_id, SEGMENT_DURATION)
+        log.info("[%s] Splitting video into %ds segments (Kling max)...", job_id, SEGMENT_DURATION)
         job["status"] = "splitting"
         segments = split_video(video_path, job_dir)
         job["total_segments"] = len(segments)
@@ -166,10 +166,10 @@ def run_pipeline(job_id: str, video_path: str, product_image_path: str, amendmen
 
             # Step 4: Generate Claude prompt
             job["status"] = f"generating_prompt"
-            prompt = generate_seedance_prompt(frames, product_image_path, transcript, amendments)
+            prompt = generate_kling_prompt(frames, product_image_path, transcript, amendments)
             log.info("[%s] Segment %d prompt: %s", job_id, seg_num, prompt[:120])
 
-            # Step 5: Generate via Seedance
+            # Step 5: Generate via Kling
             job["status"] = f"generating_video"
             video_url = None
             for attempt in range(3):

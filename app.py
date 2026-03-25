@@ -101,7 +101,7 @@ if __name__ == "__main__":
     check_ffmpeg()
 
     # Check required env vars
-    missing = [k for k in ("ANTHROPIC_API_KEY", "BYTEPLUS_API_KEY") if not os.environ.get(k)]
+    missing = [k for k in ("ANTHROPIC_API_KEY", "KLING_ACCESS_KEY_ID", "KLING_ACCESS_KEY_SECRET") if not os.environ.get(k)]
     if missing:
         log.warning("Missing environment variables: %s — set them in .env", ", ".join(missing))
 

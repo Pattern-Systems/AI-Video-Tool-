@@ -1,4 +1,4 @@
-"""Claude prompt generation for Seedance segments."""
+"""Claude prompt generation for Kling segments."""
 
 import base64
 import logging
@@ -20,39 +20,41 @@ def _encode_image(path: str) -> dict:
     }
 
 
-def generate_seedance_prompt(
+def generate_kling_prompt(
     frame_paths: list[str],
     product_image_path: str,
     transcript: str,
     amendments: str = "",
 ) -> str:
-    """Use Claude to generate an optimised Seedance prompt for one segment."""
+    """Use Claude to generate an optimised Kling prompt for one segment."""
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+    n_frames = len(frame_paths)
 
     # Build content blocks: frames + product image + text instructions
     content = []
     for i, fp in enumerate(frame_paths, 1):
-        content.append({"type": "text", "text": f"Frame {i} of 9 from the source segment:"})
+        content.append({"type": "text", "text": f"Frame {i} of {n_frames} from the source segment:"})
         content.append(_encode_image(fp))
 
     content.append({"type": "text", "text": "Product image to substitute into the video:"})
     content.append(_encode_image(product_image_path))
 
     instructions = (
-        "You are a video-generation prompt engineer. Analyse the 9 sequential frames above — "
-        "they represent an 8-second video segment. Also note the product image.\n\n"
+        f"You are a video-generation prompt engineer. Analyse the {n_frames} sequential frames above — "
+        "they represent a 10-second video segment. Also note the product image.\n\n"
         f"Audio transcript for this segment: \"{transcript or '(no speech detected)'}\"\n\n"
     )
     if amendments:
         instructions += f"User's additional instructions: \"{amendments}\"\n\n"
 
     instructions += (
-        "Write a single Seedance video-generation prompt. The prompt must:\n"
-        "1. Describe the scene, action, camera movement, energy, and pacing seen across the 9 frames\n"
-        "2. Reference the frames as @image1 through @image9 for motion guidance\n"
-        "3. Reference the product image as @product\n"
+        "Write a single Kling video-generation prompt. The prompt must:\n"
+        f"1. Describe the scene, action, camera movement, energy, and pacing seen across the {n_frames} frames\n"
+        "2. Describe the motion flow: how the action progresses from the first frame to the last\n"
+        "3. Describe the product shown in the product image and instruct Kling to feature it prominently\n"
         "4. Incorporate the transcript (speech content, tone, energy)\n"
-        "5. Instruct Seedance to replace whatever product appears in the original with @product\n"
+        "5. Describe replacing whatever product appears in the original with the provided product\n"
         "6. Apply any user amendments\n"
         "7. Do NOT include any on-screen text, captions, watermarks, or overlaid words in the scene — keep the scene clean of all text\n"
         "8. End with: Maintain 9:16 vertical format, high energy, TikTok Shop style.\n\n"
@@ -60,7 +62,7 @@ def generate_seedance_prompt(
     )
     content.append({"type": "text", "text": instructions})
 
-    log.info("Generating Seedance prompt via Claude...")
+    log.info("Generating Kling prompt via Claude...")
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1024,
